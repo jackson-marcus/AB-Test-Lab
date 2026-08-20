@@ -1,0 +1,17 @@
+# Pipeline configuration. Paths relative to the repo root.
+
+defaults:
+  alpha: 0.05
+  power: 0.8
+
+sequential:
+  # mSPRT mixture variance (tau^2); standard practical choice.
+  tau_squared: 0.0001
+
+bayes:
+  n_draws: 20000
+  prior_alpha: 1
+  prior_beta: 1
+
+eval:
+  experiment_name: abtestlab
