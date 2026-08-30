@@ -1,7 +1,7 @@
-"""Pure Functional Statistics Library for Online Experimentation.
+"""Pure functional statistics for online experimentation.
 
-100% pure, side-effect-free, deterministic mathematical functions.
-No globals, no I/O, no network calls, and total functional invariants.
+Functions here perform no I/O and do not read process config. For the
+YAML-backed API implementations see :mod:`abtestlab.stats.core`.
 """
 
 from __future__ import annotations
@@ -26,7 +26,24 @@ def compute_sample_size(
     alpha: float = 0.05,
     power: float = 0.80,
 ) -> int:
-    """Calculates required per-arm sample size for two-proportion testing."""
+    """Calculate required per-arm sample size for a two-proportion test.
+
+    The alternative rate is ``p_baseline * (1 + mde_relative)``, capped at
+    0.9999 so the formula stays defined for large relative MDEs.
+
+    Args:
+        p_baseline: Control conversion rate in ``(0, 1)``.
+        mde_relative: Minimum detectable relative lift; must be ``> 0``.
+        alpha: Two-sided Type I error.
+        power: Target power in ``(0, 1)``.
+
+    Returns:
+        Ceiling of the standard two-proportion n per arm.
+
+    Raises:
+        ValueError: If ``p_baseline`` is not in ``(0, 1)`` or ``mde_relative``
+            is not strictly positive.
+    """
     if not (0.0 < p_baseline < 1.0):
         raise ValueError(f"Baseline proportion must be in (0, 1), got {p_baseline}")
     if mde_relative <= 0.0:
@@ -53,7 +70,16 @@ def evaluate_fixed_horizon(
     treatment: ExperimentArm,
     alpha: float = 0.05,
 ) -> FixedHorizonResult:
-    """Pure Z-test of two independent binomial proportions."""
+    """Two-sided z-test of two independent binomial proportions.
+
+    Args:
+        control: Control arm counts.
+        treatment: Treatment arm counts.
+        alpha: Significance level used for the CI and ``is_significant``.
+
+    Returns:
+        Immutable :class:`FixedHorizonResult`.
+    """
     p_a = control.conversion_rate
     p_b = treatment.conversion_rate
     n_a = control.sample_size
@@ -91,19 +117,36 @@ def evaluate_msprt(
     mixing_variance_theta: float = 0.05,
     alpha: float = 0.05,
 ) -> MSPRTResult:
-    """Always-valid mixture Sequential Probability Ratio Test (mSPRT).
+    """Mixture sequential probability ratio test (library parameterization).
 
-    Guarantees finite-sample Type-I error control under continuous monitoring.
+    Uses effective sample size ``n_eff = n_A n_B / (n_A + n_B)`` and mixture
+    variance ``mixing_variance_theta``. This is **not** the same formula as
+    :func:`abtestlab.stats.core.msprt`.
+
+    Args:
+        control: Control arm counts.
+        treatment: Treatment arm counts.
+        mixing_variance_theta: Gaussian mixture variance (tau^2 analogue).
+        alpha: Type I bound used as stopping threshold ``1 / alpha``.
+
+    Returns:
+        Immutable :class:`MSPRTResult`.
+
+    Raises:
+        ValueError: If ``mixing_variance_theta`` or ``alpha`` is not positive.
     """
+    if mixing_variance_theta <= 0.0:
+        raise ValueError(f"mixing_variance_theta must be positive, got {mixing_variance_theta}")
+    if not (0.0 < alpha < 1.0):
+        raise ValueError(f"alpha must be in (0, 1), got {alpha}")
+
     n_a, n_b = control.sample_size, treatment.sample_size
     p_a, p_b = control.conversion_rate, treatment.conversion_rate
 
-    # Effective sample size and pooled variance
     n_eff = (n_a * n_b) / max(n_a + n_b, 1)
     p_bar = (control.conversions + treatment.conversions) / max(n_a + n_b, 1)
     sigma2 = max(p_bar * (1.0 - p_bar), 1e-6)
 
-    # Mixture likelihood ratio with Gaussian mixing distribution N(0, theta)
     v = n_eff / sigma2
     lambda_lr = math.sqrt(1.0 / (1.0 + v * mixing_variance_theta)) * math.exp(
         (v**2 * mixing_variance_theta * (p_b - p_a) ** 2)
@@ -131,7 +174,31 @@ def evaluate_bayesian_beta_binomial(
     mc_samples: int = 20000,
     seed: int = 42,
 ) -> BayesianBetaBinomialResult:
-    """Pure conjugate Beta-Binomial posterior simulation."""
+    """Monte Carlo comparison of two conjugate Beta posteriors.
+
+    Sampling uses a local ``numpy`` generator; the same ``seed`` is
+    deterministic. This is the only source of randomness in the functional
+    package.
+
+    Args:
+        control: Control arm counts.
+        treatment: Treatment arm counts.
+        alpha_prior: Beta prior alpha (successes).
+        beta_prior: Beta prior beta (failures).
+        mc_samples: Number of posterior draws.
+        seed: Generator seed.
+
+    Returns:
+        Immutable :class:`BayesianBetaBinomialResult`.
+
+    Raises:
+        ValueError: If priors are not positive or ``mc_samples`` is not positive.
+    """
+    if alpha_prior <= 0.0 or beta_prior <= 0.0:
+        raise ValueError("Beta priors must be strictly positive")
+    if mc_samples <= 0:
+        raise ValueError(f"mc_samples must be positive, got {mc_samples}")
+
     a_post_a = alpha_prior + control.conversions
     b_post_a = beta_prior + control.sample_size - control.conversions
 
@@ -159,9 +226,19 @@ def apply_cuped(
     y_post: tuple[float, ...] | list[float],
     x_pre: tuple[float, ...] | list[float],
 ) -> CupedResult:
-    """Pure CUPED (Controlled-experiment Using Pre-Experiment Data).
+    """CUPED: subtract the optimal linear adjustment using a pre-period covariate.
 
-    Guarantees Var(Y_CUPED) <= Var(Y).
+    Sample variances use ``ddof=1``. The reported reduction is floored at 0.
+
+    Args:
+        y_post: Post-experiment metric.
+        x_pre: Pre-experiment covariate, same length as ``y_post``.
+
+    Returns:
+        Immutable :class:`CupedResult`.
+
+    Raises:
+        ValueError: If lengths differ or there are fewer than two observations.
     """
     y = np.asarray(y_post, dtype=np.float64)
     x = np.asarray(x_pre, dtype=np.float64)

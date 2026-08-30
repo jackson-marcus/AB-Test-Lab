@@ -3,7 +3,10 @@
 .env
 
 # Data & artifacts
-data/
+data/*
+# ...except the simulated example logs the CLI, UI, README and tests all read.
+!data/example_looks.csv
+!data/example_looks_srm.csv
 mlruns/
 mlflow.db
 

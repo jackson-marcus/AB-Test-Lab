@@ -1,7 +1,6 @@
-"""Pure Functional Library - Immutable Statistics Types.
+"""Pure Functional Library — immutable statistics types.
 
-Defines immutable input and output value objects for side-effect-free
-experimentation mathematics.
+Input and output value objects for side-effect-free experimentation math.
 """
 
 from __future__ import annotations
@@ -12,7 +11,16 @@ from typing import Any
 
 @dataclass(frozen=True)
 class ExperimentArm:
-    """Immutable record of an experiment variant arm."""
+    """Immutable record of one experiment variant.
+
+    Attributes:
+        name: Human-readable arm label.
+        conversions: Count of successes; must satisfy ``0 <= conversions <= sample_size``.
+        sample_size: Number of units assigned to the arm; must be positive.
+
+    Raises:
+        ValueError: If sample size is not positive or conversions are out of range.
+    """
 
     name: str
     conversions: int
@@ -30,12 +38,25 @@ class ExperimentArm:
 
     @property
     def conversion_rate(self) -> float:
+        """Empirical conversion rate ``conversions / sample_size``."""
         return self.conversions / self.sample_size
 
 
 @dataclass(frozen=True)
 class FixedHorizonResult:
-    """Result of a two-proportion Z-test."""
+    """Result of a two-proportion Z-test.
+
+    Attributes:
+        p_control: Control conversion rate.
+        p_treatment: Treatment conversion rate.
+        absolute_difference: Treatment minus control.
+        relative_lift: Relative change vs control.
+        z_statistic: Pooled two-proportion z.
+        p_value: Two-sided normal p-value.
+        ci_lower: Lower bound of the difference CI.
+        ci_upper: Upper bound of the difference CI.
+        is_significant: Whether ``p_value < alpha`` used at evaluation time.
+    """
 
     p_control: float
     p_treatment: float
@@ -48,6 +69,11 @@ class FixedHorizonResult:
     is_significant: bool
 
     def as_dict(self) -> dict[str, Any]:
+        """Return a JSON-friendly rounded mapping of this result.
+
+        Returns:
+            Dict with abbreviated keys used by notebooks and demos.
+        """
         return {
             "p_control": round(self.p_control, 5),
             "p_treatment": round(self.p_treatment, 5),
@@ -62,7 +88,15 @@ class FixedHorizonResult:
 
 @dataclass(frozen=True)
 class MSPRTResult:
-    """Result of an always-valid mixture sequential probability ratio test."""
+    """Result of the library mSPRT (Gaussian-mixture likelihood ratio).
+
+    Attributes:
+        likelihood_ratio: Mixture likelihood ratio ``Lambda_t``.
+        stopping_threshold: ``1 / alpha``.
+        should_stop_early: Whether ``Lambda_t`` meets the threshold.
+        nominal_alpha: Alpha used to form the threshold.
+        estimated_p_value_bound: ``min(1, 1 / Lambda_t)``.
+    """
 
     likelihood_ratio: float
     stopping_threshold: float
@@ -73,7 +107,15 @@ class MSPRTResult:
 
 @dataclass(frozen=True)
 class BayesianBetaBinomialResult:
-    """Result of conjugate Beta-Bernoulli Bayesian posterior analysis."""
+    """Result of conjugate Beta-Bernoulli Monte Carlo analysis.
+
+    Attributes:
+        p_treatment_beats_control: Share of draws with treatment rate higher.
+        expected_loss_control_if_ship: E[max(treatment - control, 0)].
+        expected_loss_treatment_if_ship: E[max(control - treatment, 0)].
+        posterior_a_mean: Control posterior mean.
+        posterior_b_mean: Treatment posterior mean.
+    """
 
     p_treatment_beats_control: float
     expected_loss_control_if_ship: float
@@ -84,7 +126,15 @@ class BayesianBetaBinomialResult:
 
 @dataclass(frozen=True)
 class CupedResult:
-    """Result of CUPED pre-experiment covariate variance reduction."""
+    """Result of CUPED pre-experiment covariate variance reduction.
+
+    Attributes:
+        theta_optimal: Fitted CUPED coefficient.
+        raw_variance: Sample variance of Y (ddof=1).
+        adjusted_variance: Sample variance of the CUPED residual.
+        variance_reduction_pct: Percent reduction, floored at 0.
+        adjusted_values: CUPED-adjusted Y values.
+    """
 
     theta_optimal: float
     raw_variance: float

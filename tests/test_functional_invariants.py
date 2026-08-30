@@ -20,11 +20,17 @@ def test_experiment_arm_invariants():
     arm = ExperimentArm(name="ctrl", conversions=50, sample_size=1000)
     assert arm.conversion_rate == 0.05
 
-    # Negative conversions rejected
+    full = ExperimentArm(name="all", conversions=10, sample_size=10)
+    assert full.conversion_rate == 1.0
+    zero = ExperimentArm(name="none", conversions=0, sample_size=10)
+    assert zero.conversion_rate == 0.0
+
+    with pytest.raises(ValueError, match="must be positive"):
+        ExperimentArm(name="bad", conversions=0, sample_size=0)
+
     with pytest.raises(ValueError, match="cannot be negative"):
         ExperimentArm(name="bad", conversions=-1, sample_size=100)
 
-    # Conversions > sample size rejected
     with pytest.raises(ValueError, match="cannot exceed sample size"):
         ExperimentArm(name="bad", conversions=150, sample_size=100)
 
@@ -81,3 +87,44 @@ def test_bayesian_beta_binomial_monotonicity():
     assert res_strong.p_treatment_beats_control > res_weak.p_treatment_beats_control
     assert 0.0 <= res_strong.p_treatment_beats_control <= 1.0
     assert res_strong.expected_loss_control_if_ship > res_weak.expected_loss_control_if_ship
+
+
+def test_compute_sample_size_rejects_invalid_baseline():
+    with pytest.raises(ValueError, match="Baseline proportion"):
+        compute_sample_size(p_baseline=0.0, mde_relative=0.1)
+    with pytest.raises(ValueError, match="Baseline proportion"):
+        compute_sample_size(p_baseline=1.0, mde_relative=0.1)
+    with pytest.raises(ValueError, match="MDE relative"):
+        compute_sample_size(p_baseline=0.1, mde_relative=0.0)
+
+
+def test_fixed_horizon_zero_and_unit_rates_stay_bounded():
+    ctrl = ExperimentArm(name="ctrl", conversions=0, sample_size=1000)
+    treat = ExperimentArm(name="treat", conversions=1000, sample_size=1000)
+    res = evaluate_fixed_horizon(ctrl, treat)
+    assert 0.0 <= res.p_value <= 1.0
+    payload = res.as_dict()
+    assert payload["is_significant"] is True
+    assert "ci_95" in payload and len(payload["ci_95"]) == 2
+
+
+def test_msprt_rejects_nonpositive_mixture_or_alpha():
+    ctrl = ExperimentArm(name="ctrl", conversions=10, sample_size=100)
+    treat = ExperimentArm(name="treat", conversions=12, sample_size=100)
+    with pytest.raises(ValueError, match="mixing_variance_theta"):
+        evaluate_msprt(ctrl, treat, mixing_variance_theta=0.0)
+    with pytest.raises(ValueError, match="alpha"):
+        evaluate_msprt(ctrl, treat, alpha=0.0)
+
+
+def test_cuped_rejects_length_mismatch_and_short_series():
+    with pytest.raises(ValueError, match="Lengths must match"):
+        apply_cuped(y_post=[1.0, 2.0], x_pre=[1.0])
+    with pytest.raises(ValueError, match="At least 2 observations"):
+        apply_cuped(y_post=[1.0], x_pre=[1.0])
+
+
+def test_bayesian_probability_bounded_on_identical_arms():
+    arm = ExperimentArm(name="a", conversions=50, sample_size=100)
+    res = evaluate_bayesian_beta_binomial(arm, arm, mc_samples=2000, seed=1)
+    assert 0.0 <= res.p_treatment_beats_control <= 1.0

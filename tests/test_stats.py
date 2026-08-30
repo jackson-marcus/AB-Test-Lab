@@ -1,6 +1,7 @@
 """Experimentation stats validated against theory and simulation."""
 
 import numpy as np
+import pytest
 from fastapi.testclient import TestClient
 
 from abtestlab.api.main import create_app
@@ -104,3 +105,80 @@ def test_api_roundtrip():
     assert r.json()["per_arm_sample_size"] > 10_000
     demo = client.post("/cuped-demo", json={"covariate_correlation": 0.7}).json()
     assert demo["variance_reduction"] > 0.2
+
+
+def test_sample_size_rejects_invalid_inputs():
+    with pytest.raises(ValueError, match="Baseline"):
+        sample_size_two_proportions(0.0, 0.1)
+    with pytest.raises(ValueError, match="MDE"):
+        sample_size_two_proportions(0.05, 0.0)
+
+
+def test_core_rejects_conversions_exceeding_n():
+    with pytest.raises(ValueError, match="cannot exceed"):
+        z_test_two_proportions(11, 10, 1, 10)
+    with pytest.raises(ValueError, match="cannot exceed"):
+        msprt(1, 10, 11, 10)
+
+
+def test_cuped_adjust_uses_consistent_ddof():
+    """Regression: np.cov uses ddof=1; variance must use the same convention."""
+    rng = np.random.default_rng(2)
+    covariate = rng.normal(0, 1, 5000)
+    metric = 0.7 * covariate + rng.normal(0, np.sqrt(1 - 0.49), 5000)
+    _, reduction = cuped_adjust(metric, covariate)
+    var_x = float(np.var(covariate, ddof=1))
+    theta = float(np.cov(metric, covariate)[0, 1] / var_x)
+    adjusted = metric - theta * (covariate - covariate.mean())
+    expected = 1 - float(np.var(adjusted, ddof=1) / np.var(metric, ddof=1))
+    assert abs(reduction - expected) < 1e-12
+    assert 0.0 <= reduction <= 1.0
+
+
+def test_msprt_library_and_api_formulas_are_not_interchangeable():
+    """The two mSPRT implementations use different parameterizations by design."""
+    from abtestlab.functional import ExperimentArm, evaluate_msprt
+
+    library = evaluate_msprt(
+        ExperimentArm("c", 400, 8000),
+        ExperimentArm("t", 560, 8000),
+    )
+    api = msprt(400, 8000, 560, 8000)
+    assert library.likelihood_ratio != pytest.approx(float(api["lambda"]))
+
+
+def test_api_rejects_invalid_counts():
+    client = TestClient(create_app())
+    r = client.post(
+        "/analyze",
+        json={
+            "conversions_control": 11,
+            "n_control": 10,
+            "conversions_treatment": 1,
+            "n_treatment": 10,
+        },
+    )
+    assert r.status_code == 422
+
+
+def test_sample_size_rejects_an_alternative_rate_that_is_not_a_probability():
+    """Regression: p_control * (1 + mde) >= 1 made p2 * (1 - p2) negative.
+
+    That produced a silent nonsense answer for (0.6, 1.0) -- two units per arm --
+    and a NaN that blew up as an unhandled 500 for (0.5, 1.5).
+    """
+    with pytest.raises(ValueError, match="not a probability"):
+        sample_size_two_proportions(0.6, 1.0)
+    with pytest.raises(ValueError, match="not a probability"):
+        sample_size_two_proportions(0.5, 1.5)
+    # 0.6 -> 0.9 is still a legal (enormous) alternative, so it must still compute,
+    # and shrink as the effect grows.
+    assert sample_size_two_proportions(0.6, 0.5) == 32
+    assert sample_size_two_proportions(0.6, 0.5) > sample_size_two_proportions(0.6, 0.6)
+
+
+def test_power_endpoint_reports_impossible_alternatives_instead_of_500():
+    client = TestClient(create_app())
+    response = client.post("/power", json={"baseline_rate": 0.6, "mde_relative": 1.0})
+    assert response.status_code == 422
+    assert "not a probability" in response.json()["detail"]

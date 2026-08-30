@@ -1,4 +1,4 @@
-.PHONY: install lint format test api ui mlflow docker-up docker-down
+.PHONY: install lint format test api ui replay docker-up docker-down
 
 install:
 	uv sync --group dev
@@ -20,8 +20,8 @@ api:
 ui:
 	ABTESTLAB_API_URL=http://localhost:8240 uv run streamlit run src/abtestlab/ui/app.py --server.port 8741
 
-mlflow:
-	uv run mlflow ui --backend-store-uri sqlite:///mlflow.db --port 5025
+replay:
+	uv run abtestlab monitor data/example_looks.csv
 
 docker-up:
 	docker compose up --build -d

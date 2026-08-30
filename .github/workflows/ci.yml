@@ -43,3 +43,10 @@ jobs:
           context: .
           push: false
           tags: abtestlab-api:ci
+      - name: Build UI image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.ui
+          push: false
+          tags: abtestlab-ui:ci
