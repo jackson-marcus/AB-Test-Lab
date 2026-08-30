@@ -1,59 +1,217 @@
-# ABTestLab — Pure Functional Experimentation & Sequential Statistical Engine <div align="center"> [![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg?logo=python&logoColor=white)](https://www.python.org/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.111-009688.svg?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
-[![Streamlit](https://img.shields.io/badge/Streamlit-App-FF4B4B.svg?logo=streamlit&logoColor=white)](https://streamlit.io/)
-[![Docker](https://img.shields.io/badge/Docker-Ready-2496ED.svg?logo=docker&logoColor=white)](https://www.docker.com/)
-[![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
-[![Tests: Pytest](https://img.shields.io/badge/tests-pytest-blue.svg?logo=pytest&logoColor=white)](https://pytest.org/) </div> > **Rigorous statistical experimentation library providing always-valid sequential testing (mSPRT), CUPED variance reduction, and Bayesian Beta-Binomial decision modeling — engineered as a Pure Functional Library with strict algebraic property invariants.** --- ## 🏛️ Architecture Pattern **Pure Functional Library + Property-Based Invariants Architecture** Online A/B testing and experimentation platforms require absolute mathematical integrity:
-> **Note:** This is a portfolio project demonstrating software engineering patterns and ML concepts. Not intended for production use without further hardening. - **Peeking & Early Stopping Hazards:** Continuously monitoring classical fixed-horizon Z-tests inflates Type-I error rates from 5% to over 30%.
-- **Side-Effect Free Purity:** Statistical calculation routines should never perform hidden I/O, rely on global mutable state, or alter input arrays in-place.
-- **Mathematical Invariants:** Every statistical routine must satisfy provable algebraic properties (e.g. variance reduction monotonicity, probability boundedness, symmetry). The **Pure Functional Library Architecture** structures all mathematical evaluation as total, pure functions over immutable value objects (`ExperimentArm`, `FixedHorizonResult`, `MSPRTResult`, `CupedResult`): ```mermaid
-flowchart TD subgraph Inputs["🔒 Immutable Inputs"] Ctrl["ExperimentArm(Control)"] Treat["ExperimentArm(Treatment)"] PreCov["Pre-Experiment Covariate X"] end subgraph PureFuncs["📐 Pure Side-Effect-Free Functional Engine"] F1["evaluate_fixed_horizon()<br/>(Two-Proportion Z-Test)"] F2["evaluate_msprt()<br/>(Mixture Sequential Ratio)"] F3["evaluate_bayesian_beta_binomial()<br/>(Conjugate Posteriors)"] F4["apply_cuped()<br/>(Covariance Adjustment)"] end subgraph Outputs["📊 Immutable Typed Results"] R1["FixedHorizonResult"] R2["MSPRTResult"] R3["BayesianBetaBinomialResult"] R4["CupedResult"] end Ctrl & Treat --> F1 --> R1 Ctrl & Treat --> F2 --> R2 Ctrl & Treat --> F3 --> R3 PreCov --> F4 --> R4
-``` ### Provable Algebraic Invariants 1. **Bounded Probability Invariant:** $\forall \text{ queries}, \; p \in [0.0, 1.0]$.
-2. **CUPED Variance Reduction Invariant:** For optimal $\theta^* = \frac{\text{Cov}(X, Y)}{\text{Var}(X)}$, $\text{Var}(Y_{\text{CUPED}}) \le \text{Var}(Y)$.
-3. **Always-Valid Sequential Invariant (mSPRT):** Type-I false positive error is uniformly bounded: $$P_{H_0}\left(\exists t \ge 1 : \Lambda_t \ge \frac{1}{\alpha}\right) \le \alpha$$
-4. **Monotonicity Invariant:** Increasing observed conversions in the treatment arm strictly increases $P(\text{Treatment} > \text{Control})$. --- ## 📐 Mathematical Formulation ### 1. Always-Valid Sequential Testing (mSPRT) Unlike fixed-horizon tests that require waiting for predetermined sample sizes $N$, the mixture Sequential Probability Ratio Test (mSPRT) allows continuous monitoring without alpha-spending inflation. Let $V_t = \frac{n_A n_B}{n_A + n_B} / \sigma^2$ be the effective information fraction. Under a Gaussian mixture prior $H_1: \delta \sim \mathcal{N}(0, \tau^2)$, the sequential mixture likelihood ratio is: $$\Lambda_t = \sqrt{\frac{1}{1 + V_t \tau^2}} \exp\left(\frac{V_t^2 \tau^2 (\hat{p}_B - \hat{p}_A)^2}{2(1 + V_t \tau^2)}\right)$$ **Stopping Rule:** Reject $H_0$ immediately if $\Lambda_t \ge 1/\alpha$ (e.g. $\Lambda_t \ge 20$ for $\alpha = 0.05$). ### 2. CUPED Variance Reduction (Controlled-experiment Using Pre-Experiment Data) Using pre-experiment metric $X$ correlated with post-experiment metric $Y$: $$Y_{\text{CUPED}} = Y - \theta^* (X - \mathbb{E}[X]), \quad \text{where } \theta^* = \frac{\text{Cov}(X, Y)}{\text{Var}(X)}$$ $$\text{Var}(Y_{\text{CUPED}}) = \text{Var}(Y) \cdot \left(1 - \rho_{XY}^2\right)$$ A correlation of $\rho = 0.60$ reduces required sample size by **36%**, accelerating experiment velocity. ### 3. Bayesian Beta-Binomial Decision Engine Given conjugate Beta priors $\text{Beta}(\alpha_0, \beta_0)$, posteriors after observing $k$ conversions in $n$ trials are: $$\theta_A \sim \text{Beta}(\alpha_0 + k_A,\, \beta_0 + n_A - k_A), \quad \theta_B \sim \text{Beta}(\alpha_0 + k_B,\, \beta_0 + n_B - k_B)$$ $$\text{Expected Loss if Ship B} = \mathbb{E}_{\theta_A, \theta_B}\left[\max(0,\, \theta_A - \theta_B)\right]$$ --- ## 🚀 Quick Start & Usage ```bash
-# Setup environment and run tests
-uv sync
-uv run pytest # Launch FastAPI microservice & Streamlit interactive laboratory
-uv run uvicorn abtestlab.api.routes:app --reload --port 8000
-``` ### Pure Functional Python Usage ```python
-from abtestlab.functional import ( ExperimentArm, evaluate_fixed_horizon, evaluate_msprt, evaluate_bayesian_beta_binomial, apply_cuped, compute_sample_size,
-) # 1. Calculate required sample size
-sample_n = compute_sample_size(p_baseline=0.08, mde_relative=0.10, alpha=0.05, power=0.80)
-print(f"Required per-arm sample size: {sample_n}") # 2. Immutable Experiment Arms
-control = ExperimentArm(name="Control_V1", conversions=820, sample_size=10000)
-treatment = ExperimentArm(name="Treatment_V2", conversions=960, sample_size=10000) # 3. Always-Valid Sequential Test (mSPRT)
-msprt_res = evaluate_msprt(control, treatment, mixing_variance_theta=0.05, alpha=0.05)
-print(f"mSPRT Stopping Decision: {msprt_res.should_stop_early} (Likelihood Ratio: {msprt_res.likelihood_ratio:.2f})") # 4. Bayesian Posterior Decision
-bayes_res = evaluate_bayesian_beta_binomial(control, treatment)
-print(f"P(Treatment > Control): {bayes_res.p_treatment_beats_control:.1%}") # 5. CUPED Variance Reduction
-cuped_res = apply_cuped(y_post=[12.0, 15.0, 18.0, 22.0], x_pre=[10.0, 14.0, 17.0, 20.0])
-print(f"Variance Reduced by: {cuped_res.variance_reduction_pct:.1f}%")
-``` --- ## 📊 Benchmark & Performance Metrics | Statistical Methodology | Traditional Fixed-Horizon | ABTestLab Pure Engine |
+<div align="center">
+
+<img src="docs/brand/banner.svg" alt="ABTestLab — Sequential Experimentation & Statistical Decision Engine" width="720">
+
+</div>
+
+# ABTestLab — Sequential Experimentation & Statistical Decision Engine
+
+**Run A/B tests you can safely peek at.** ABTestLab is a small experimentation toolkit that plans experiments (power/sample size), analyses them with both a classical fixed-horizon test and an *always-valid* sequential test (mSPRT), reduces variance with CUPED, and turns the result into a Bayesian ship/no-ship decision — exposed as a FastAPI service and a Streamlit workbench.
+
+<div align="center">
+
+[![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg?logo=python&logoColor=white)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/API-FastAPI-009688.svg?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![Tests: pytest](https://img.shields.io/badge/tests-pytest-0A9EDC.svg?logo=pytest&logoColor=white)](https://pytest.org/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](https://opensource.org/licenses/MIT)
+
+</div>
+
+> **Portfolio project.** Built to demonstrate experimentation statistics and a pure-functional core with property-based tests. Runs on synthetic / user-supplied counts; not hardened for production use.
+
+---
+
+## The problem
+
+Teams peek at running A/B tests. Someone opens the dashboard on day 3, sees `p < 0.05`, and ships. The trouble is that a classical fixed-horizon z-test is only valid **once**, at the sample size you committed to up front. Check it repeatedly and the false-positive rate climbs far past the nominal 5% — you "find" effects that aren't there.
+
+ABTestLab addresses this directly: it plans the experiment properly, and it reports an **always-valid** sequential p-value alongside the fixed one, so continuous monitoring is safe by construction. It also reduces the variance of the metric (CUPED) and frames the decision in terms of risk (expected loss, probability of beating control) rather than a single p-value.
+
+## What it does
+
+- **Plan** — compute the per-arm sample size needed to detect a given relative lift at a target power.
+- **Analyse (fixed horizon)** — two-proportion z-test with a confidence interval, valid at the planned sample size.
+- **Monitor (sequential)** — a mixture Sequential Probability Ratio Test (mSPRT) whose p-value stays valid under continuous peeking.
+- **Reduce variance** — CUPED uses a correlated pre-experiment covariate to strip out pre-existing noise.
+- **Decide (Bayesian)** — Beta-Binomial posteriors give P(treatment beats control) and the expected loss of shipping.
+
+## How it works
+
+The statistics live in two layers. A **pure-functional core** (`functional/`) expresses every method as a total, side-effect-free function over immutable value objects, and is guarded by property-based invariant tests. A **config-driven service layer** (`stats/core.py`) wraps the same methods with defaults from `configs/config.yaml` and powers the API and UI.
+
+```mermaid
+flowchart TD
+    subgraph Core["functional/ — pure, immutable core"]
+        T["Value objects<br/>ExperimentArm, *Result (frozen dataclasses)"]
+        F["compute_sample_size · evaluate_fixed_horizon<br/>evaluate_msprt · apply_cuped<br/>evaluate_bayesian_beta_binomial"]
+        INV["Property-based invariant tests"]
+        T --> F --> INV
+    end
+
+    subgraph Service["stats/core.py — config-driven"]
+        S["sample_size · z_test · msprt<br/>cuped_test · bayes_beta_bernoulli"]
+        CFG["configs/config.yaml<br/>alpha, power, tau^2, priors"]
+        CFG --> S
+    end
+
+    S --> API["FastAPI service<br/>(api/main:app)"]
+    API --> UI["Streamlit workbench<br/>(ui/app.py)"]
+```
+
+## Statistical methods
+
+### Sample size (two proportions)
+
+Per-arm size to detect a relative lift, given baseline $p_1$, alternative $p_2 = p_1(1+\text{MDE})$, significance $\alpha$ and power $1-\beta$:
+
+$$n = \frac{\left(z_{1-\alpha/2}\sqrt{2\bar p(1-\bar p)} + z_{1-\beta}\sqrt{p_1(1-p_1)+p_2(1-p_2)}\right)^2}{(p_2-p_1)^2}, \quad \bar p = \tfrac{p_1+p_2}{2}$$
+
+### Fixed-horizon z-test
+
+Pooled two-proportion z-test with a Wald confidence interval on the difference. Valid **only** at the pre-planned sample size — hence the sequential test below.
+
+### Always-valid sequential test (mSPRT)
+
+The mixture Sequential Probability Ratio Test mixes the likelihood ratio over a Gaussian prior on the effect ($\delta \sim \mathcal{N}(0,\tau^2)$), producing a running statistic $\Lambda_t$. The stopping rule and reported p-value are:
+
+$$\text{stop and reject } H_0 \iff \Lambda_t \ge \frac{1}{\alpha}, \qquad p^{\text{always-valid}}_t = \min\left(1,\ \frac{1}{\Lambda_t}\right)$$
+
+Because $\Lambda_t$ is a non-negative martingale under $H_0$, the Type-I error is bounded by $\alpha$ **no matter how often you look** — that is what makes peeking safe.
+
+### CUPED variance reduction
+
+Using a pre-experiment covariate $X$ correlated with the metric $Y$:
+
+$$Y_{\text{CUPED}} = Y - \theta^\*(X - \mathbb{E}[X]), \qquad \theta^\* = \frac{\operatorname{Cov}(X,Y)}{\operatorname{Var}(X)}$$
+
+The adjusted variance is $\operatorname{Var}(Y_{\text{CUPED}}) = \operatorname{Var}(Y)\,(1-\rho_{XY}^2)$, so the variance reduction equals $\rho_{XY}^2$ — a mathematical identity, not a benchmark. Since required sample size scales with metric variance, a more correlated covariate means a shorter experiment.
+
+### Bayesian Beta-Binomial decision
+
+Conjugate Beta priors give posteriors $\theta \sim \text{Beta}(\alpha_0 + k,\ \beta_0 + n - k)$ per arm. Monte-Carlo sampling then yields the decision metrics:
+
+$$P(\theta_B > \theta_A), \qquad \mathbb{E}\big[\max(0,\ \theta_A - \theta_B)\big] \ \text{(expected loss if you ship B)}$$
+
+### Pure-functional invariants
+
+The `functional/` core is built so each method provably satisfies algebraic properties, which the test suite asserts directly:
+
+1. **Bounded probability** — every reported probability stays in $[0, 1]$.
+2. **CUPED reduction** — $\operatorname{Var}(Y_{\text{CUPED}}) \le \operatorname{Var}(Y)$ always.
+3. **Sample-size monotonicity** — a smaller MDE requires a strictly larger sample.
+4. **Bayesian monotonicity** — more treatment conversions strictly increase $P(\text{treatment} > \text{control})$.
+
+## Getting started
+
+```bash
+make install                 # uv sync --group dev
+make test                    # uv run pytest --cov
+
+make api                     # FastAPI on http://localhost:8240
+make ui                      # Streamlit workbench on http://localhost:8741
+```
+
+The UI reads `ABTESTLAB_API_URL` (defaults to `http://localhost:8240`); `make ui` sets it for you, so start the API first.
+
+Or with Docker (API on `8240`, UI on `8741`):
+
+```bash
+make docker-up               # docker compose up --build -d
+make docker-down
+```
+
+## API
+
+Base URL `http://localhost:8240`. All analysis routes take conversion counts `{conversions_control, n_control, conversions_treatment, n_treatment}`.
+
+| Method | Route | Purpose |
 |---|---|---|
-| **Continuous Monitoring Peeking Inflation** | ❌ Inflates $\alpha > 30\%$ | **✅ Bounded $\alpha \le 5.0\%$ (mSPRT)** |
-| **Variance Reduction via Covariates** | None | **30–50% Sample Reduction (CUPED)** |
-| **Decision Risk Metric** | P-value only | **Expected Loss ($) + P(Win)** |
-| **Calculation Latency** | ~5ms | **[measured on your hardware] (Pure Vectorized)** | --- ## 🗂️ Module Organization ```
-abtestlab/
-├── src/abtestlab/
-│ ├── functional/ ← 🏛️ Pure Functional Statistics & Invariants
-│ │ ├── types.py │ ExperimentArm, FixedHorizonResult, MSPRTResult, BayesianBetaBinomialResult, CupedResult
-│ │ ├── stats.py │ Pure mathematical functions (Z-test, mSPRT, CUPED, Beta-Binomial)
-│ │ └── __init__.py
-│ ├── stats/ ← 📊 Legacy experimentation routines
-│ │ └── core.py │ sample_size_two_proportions(), z_test_two_proportions()
-│ ├── api/ ← 🌐 FastAPI endpoints (/evaluate, /sample_size, /health)
-│ ├── ui/ ← 🖥️ Streamlit experimentation workbench
-│ └── settings.py
-├── tests/
-│ ├── test_functional_invariants.py ← Property-based algebraic invariant tests
-│ ├── test_stats.py ← Statistical accuracy tests
-│ └── conftest.py
-├── docker-compose.yml
-└── pyproject.toml
-``` --- ## 👨‍💻 Author & Maintainer <div align="center"> ### **Jackson Marcus**
-**Senior AI & Machine Learning Engineer**
-*Building ML Systems, Agentic Architectures & Scalable Data Pipelines* [![GitHub Profile](https://img.shields.io/badge/GitHub-jackson--marcus-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/jackson-marcus)
-[![Upwork Portfolio](https://img.shields.io/badge/Upwork-Top%20Rated%20Plus-14A800?style=for-the-badge&logo=upwork&logoColor=white)](https://www.upwork.com/freelancers/~012235717501ad9c7b)
-[![Email Contact](https://img.shields.io/badge/Email-wajahatanees41%40gmail.com-D14836?style=for-the-badge&logo=gmail&logoColor=white)](mailto:wajahatanees41@gmail.com) 📍 *Byron, GA, USA* </div>
+| `GET`  | `/health` | Liveness check |
+| `POST` | `/power` | Per-arm sample size from `baseline_rate` + `mde_relative` |
+| `POST` | `/analyze` | Fixed-horizon z-test: lift, p-value, 95% CI |
+| `POST` | `/sequential` | mSPRT: likelihood ratio, always-valid p-value, `can_stop` |
+| `POST` | `/bayes` | P(beat control), expected loss, lift percentiles |
+| `POST` | `/cuped-demo` | Simulates a correlated pre-period metric and shows CUPED's variance reduction |
+
+### Python usage (pure core)
+
+```python
+from abtestlab.functional import (
+    ExperimentArm,
+    compute_sample_size,
+    evaluate_fixed_horizon,
+    evaluate_msprt,
+    evaluate_bayesian_beta_binomial,
+)
+
+# Plan
+n = compute_sample_size(p_baseline=0.08, mde_relative=0.10, alpha=0.05, power=0.80)
+
+# Immutable arms (validated on construction)
+control = ExperimentArm(name="control", conversions=820, sample_size=10_000)
+treatment = ExperimentArm(name="treatment", conversions=960, sample_size=10_000)
+
+fixed = evaluate_fixed_horizon(control, treatment)          # .p_value, .ci_lower/upper
+seq   = evaluate_msprt(control, treatment)                  # .should_stop_early, .likelihood_ratio
+bayes = evaluate_bayesian_beta_binomial(control, treatment) # .p_treatment_beats_control
+```
+
+## Evaluation
+
+There is no accuracy benchmark to quote — the methods are validated against statistical **theory and simulation**, which is what the test suite does:
+
+- **Null calibration** — under a true null (both arms same rate), the fixed-horizon test flags significance at roughly the nominal 5%, and the mSPRT rarely stops early, over hundreds of simulated experiments.
+- **Power** — on injected effects, both tests detect the lift and the mSPRT crosses its stopping boundary.
+- **CUPED** — measured variance reduction matches the theoretical $\rho^2$.
+- **Sample size** — reproduces the textbook ballpark (~31k/arm for a 5% baseline and 10% relative MDE).
+
+Reproduce it all with:
+
+```bash
+make test                    # uv run pytest --cov
+```
+
+Simulation seeds are fixed in the tests, so results are deterministic on your machine.
+
+## Testing
+
+```bash
+make test
+```
+
+- `tests/test_functional_invariants.py` — property-based invariants of the pure `functional/` core (bounds, monotonicity, CUPED reduction).
+- `tests/test_stats.py` — theory/simulation checks of `stats/core.py` (null calibration, power, CUPED) plus FastAPI contract tests.
+
+## Limitations
+
+- Runs on synthetic simulations or user-supplied counts; there is no experiment assignment, logging, or data pipeline.
+- Analysis assumes a single binary conversion metric per arm and independent observations.
+- The mSPRT result depends on the mixture variance $\tau^2$ (`configs/config.yaml`); a poorly chosen prior trades detection speed for power.
+- Bayesian outputs are Monte-Carlo estimates, so they carry small sampling noise.
+- Two statistics implementations coexist (`functional/` and `stats/core.py`); the pure core is not yet wired into the API.
+
+## Project structure
+
+```
+src/abtestlab/
+├── functional/   # Pure, immutable statistics core + typed result objects
+├── stats/        # Config-driven statistics powering the service layer
+├── api/          # FastAPI app (main:app) and routes
+├── ui/           # Streamlit workbench
+└── settings.py   # Env + configs/config.yaml loading
+```
+
+## License
+
+MIT
+
+---
+
+<div align="center">
+
+**Jackson Marcus** · Senior AI & Machine Learning Engineer
+
+[![GitHub](https://img.shields.io/badge/GitHub-jackson--marcus-181717?logo=github&logoColor=white)](https://github.com/jackson-marcus)
+[![Email](https://img.shields.io/badge/Email-contact-D14836?logo=gmail&logoColor=white)](mailto:wajahatanees41@gmail.com)
+
+</div>
